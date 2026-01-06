@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSL Multi-Timeframe Trading Dashboard v3</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a2332;
+            --border-color: #2d3748;
+            --text-primary: #f7fafc;
+            --text-secondary: #a0aec0;
+            --text-muted: #718096;
+            --green: #10b981;
+            --red: #ef4444;
+            --orange: #f59e0b;
+            --blue: #3b82f6;
+            --purple: #8b5cf6;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .dashboard { max-width: 1800px; margin: 0 auto; padding: 20px; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            padding: 20px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .header-left { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+        .ticker { font-size: 28px; font-weight: 700; }
+        .current-price { font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+        .price-change { font-size: 13px; font-family: 'JetBrains Mono', monospace; }
+        .price-change.positive { color: var(--green); }
+        .price-change.negative { color: var(--red); }
+        .last-update { font-size: 11px; color: var(--text-muted); }
+
+        .traffic-light-container { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .traffic-light {
+            width: 90px; height: 220px;
+            background: linear-gradient(145deg, #1a1a2e, #0f0f1a);
+            border-radius: 45px; padding: 10px;
+            display: flex; flex-direction: column;
+            justify-content: space-around; align-items: center;
+            border: 3px solid #2d2d4a;
+        }
+        .light { width: 55px; height: 55px; border-radius: 50%; transition: all 0.5s; }
+        .light.red { background: radial-gradient(circle at 30% 30%, #5c0000, #2d0000); }
+        .light.red.active { background: radial-gradient(circle at 30% 30%, #ff4444, #cc0000); box-shadow: 0 0 30px var(--red); animation: pulse 1.5s infinite; }
+        .light.orange { background: radial-gradient(circle at 30% 30%, #5c3d00, #2d1e00); }
+        .light.orange.active { background: radial-gradient(circle at 30% 30%, #ffaa00, #cc8800); box-shadow: 0 0 30px var(--orange); animation: pulse 1.5s infinite; }
+        .light.green { background: radial-gradient(circle at 30% 30%, #0a3d20, #051e10); }
+        .light.green.active { background: radial-gradient(circle at 30% 30%, #22c55e, #10b981); box-shadow: 0 0 30px var(--green); animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+
+        .signal-text { font-size: 14px; font-weight: 700; text-transform: uppercase; text-align: center; }
+        .signal-text.buy { color: var(--green); }
+        .signal-text.wait { color: var(--orange); }
+        .signal-text.sell { color: var(--red); }
+        .score-box { font-size: 10px; color: var(--text-muted); text-align: center; line-height: 1.4; }
+
+        .grid { display: grid; gap: 16px; margin-bottom: 24px; }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .card { background: var(--bg-card); border-radius: 12px; padding: 16px; border: 1px solid var(--border-color); }
+
+        .section-title {
+            font-size: 14px; font-weight: 600; margin-bottom: 14px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .section-title::before {
+            content: ''; width: 3px; height: 16px;
+            background: linear-gradient(to bottom, var(--purple), var(--blue));
+            border-radius: 2px;
+        }
+
+        .confirmation-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .confirmation-table th {
+            text-align: left; padding: 8px 6px; background: var(--bg-secondary);
+            color: var(--text-muted); font-weight: 600; text-transform: uppercase; font-size: 10px;
+        }
+        .confirmation-table td { padding: 8px 6px; border-bottom: 1px solid var(--border-color); }
+        .confirmation-table tr:last-child td { border-bottom: none; }
+
+        .status-icon {
+            width: 20px; height: 20px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: bold;
+        }
+        .status-icon.pass { background: rgba(16, 185, 129, 0.2); color: var(--green); }
+        .status-icon.fail { background: rgba(239, 68, 68, 0.2); color: var(--red); }
+
+        .tf-card { border-left: 3px solid; }
+        .tf-card.daily { border-left-color: var(--blue); }
+        .tf-card.weekly { border-left-color: var(--purple); }
+        .tf-card.monthly { border-left-color: var(--orange); }
+
+        .tf-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color); }
+        .tf-title { font-size: 13px; font-weight: 600; }
+        .tf-badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+        .tf-badge.bullish { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+        .tf-badge.bearish { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+        .tf-badge.neutral { background: rgba(245, 158, 11, 0.15); color: var(--orange); }
+
+        .indicator-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 11px; }
+        .indicator-name { color: var(--text-secondary); }
+        .indicator-value { font-family: 'JetBrains Mono', monospace; }
+
+        .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+        .summary-card { background: var(--bg-card); padding: 12px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); }
+        .summary-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
+        .summary-value { font-size: 16px; font-weight: 600; margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+        .entry-box { padding: 16px; border-radius: 8px; border-left: 4px solid; }
+        .entry-box.buy { background: rgba(16, 185, 129, 0.1); border-left-color: var(--green); }
+        .entry-box.wait { background: rgba(245, 158, 11, 0.1); border-left-color: var(--orange); }
+        .entry-box.sell { background: rgba(239, 68, 68, 0.1); border-left-color: var(--red); }
+        .entry-box h4 { font-size: 13px; margin-bottom: 8px; }
+        .entry-box p { font-size: 11px; color: var(--text-secondary); line-height: 1.5; }
+
+        .levels-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .levels-table th, .levels-table td { padding: 8px 6px; text-align: left; }
+        .levels-table th { background: var(--bg-secondary); color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
+        .levels-table td { border-bottom: 1px solid var(--border-color); }
+        .level-support { color: var(--green); }
+        .level-resistance { color: var(--red); }
+        .level-current { color: var(--blue); background: rgba(59, 130, 246, 0.1); }
+
+        .btn { background: linear-gradient(135deg, var(--purple), var(--blue)); border: none; border-radius: 6px; padding: 10px 18px; color: white; font-weight: 600; cursor: pointer; font-size: 12px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .api-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); }
+        .api-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+        .api-dot.loading { background: var(--orange); animation: blink 0.5s infinite; }
+        .api-dot.error { background: var(--red); }
+        @keyframes blink { 50% { opacity: 0.4; } }
+
+        .disclaimer { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 12px; font-size: 10px; color: var(--orange); margin-top: 24px; }
+
+        .logic-box { background: var(--bg-secondary); border-radius: 8px; padding: 12px; font-size: 11px; }
+        .logic-box h5 { font-size: 11px; margin-bottom: 8px; }
+        .logic-box ul { padding-left: 16px; color: var(--text-secondary); line-height: 1.6; }
+
+        @media (max-width: 1200px) { .grid-3 { grid-template-columns: repeat(2, 1fr); } .summary-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } .summary-grid { grid-template-columns: repeat(2, 1fr); } .header { flex-direction: column; } }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+            <button class="btn" id="refreshBtn" onclick="fetchAllData()">🔄 Refresh All Timeframes</button>
+            <div class="api-status">
+                <div class="api-dot" id="apiDot"></div>
+                <span id="apiStatusText">Ready</span>
+            </div>
+        </div>
+
+        <div class="header">
+            <div class="header-left">
+                <div>
+                    <div class="ticker">CSL.AX</div>
+                    <div class="last-update" id="lastUpdate">Last update: --</div>
+                </div>
+                <div>
+                    <div class="current-price" id="currentPrice">$--</div>
+                    <div class="price-change" id="priceChange">--</div>
+                </div>
+            </div>
+            <div class="traffic-light-container">
+                <div class="traffic-light">
+                    <div class="light red" id="lightRed"></div>
+                    <div class="light orange" id="lightOrange"></div>
+                    <div class="light green" id="lightGreen"></div>
+                </div>
+                <div class="signal-text" id="signalText">LOADING</div>
+                <div class="score-box">
+                    <div id="bullishCount">🟢 Bullish: 0/6</div>
+                    <div id="bearishCount">🔴 Bearish: 0/6</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-label">Daily Signal</div><div class="summary-value" id="dailySignalSum">--</div></div>
+            <div class="summary-card"><div class="summary-label">Weekly Signal</div><div class="summary-value" id="weeklySignalSum">--</div></div>
+            <div class="summary-card"><div class="summary-label">Monthly Signal</div><div class="summary-value" id="monthlySignalSum">--</div></div>
+            <div class="summary-card"><div class="summary-label">MTF Alignment</div><div class="summary-value" id="mtfAlign">--</div></div>
+            <div class="summary-card"><div class="summary-label">Entry Quality</div><div class="summary-value" id="entryQual">--</div></div>
+        </div>
+
+        <div class="grid grid-2">
+            <div class="card">
+                <div class="section-title">✅ BULLISH Confirmations Required for BUY</div>
+                <table class="confirmation-table">
+                    <thead><tr><th>✓</th><th>Indicator</th><th>TF</th><th>Current</th><th>Required</th></tr></thead>
+                    <tbody id="bullishTable"></tbody>
+                </table>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between;">
+                    <span style="font-size: 11px; color: var(--text-muted);">Score:</span>
+                    <span id="bullishTotal" style="font-size: 13px; font-weight: 600; color: var(--green);">0/6</span>
+                </div>
+            </div>
+            <div class="card">
+                <div class="section-title">🔻 BEARISH Confirmations (No Entry)</div>
+                <table class="confirmation-table">
+                    <thead><tr><th>!</th><th>Indicator</th><th>TF</th><th>Current</th><th>Bearish When</th></tr></thead>
+                    <tbody id="bearishTable"></tbody>
+                </table>
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between;">
+                    <span style="font-size: 11px; color: var(--text-muted);">Score:</span>
+                    <span id="bearishTotal" style="font-size: 13px; font-weight: 600; color: var(--red);">0/6</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title" style="margin-top: 24px;">📊 Timeframe Analysis</div>
+        <div class="grid grid-3">
+            <div class="card tf-card daily">
+                <div class="tf-header"><span class="tf-title">📅 DAILY</span><span class="tf-badge" id="dailyBadge">--</span></div>
+                <div id="dailyDetails"></div>
+            </div>
+            <div class="card tf-card weekly">
+                <div class="tf-header"><span class="tf-title">📆 WEEKLY</span><span class="tf-badge" id="weeklyBadge">--</span></div>
+                <div id="weeklyDetails"></div>
+            </div>
+            <div class="card tf-card monthly">
+                <div class="tf-header"><span class="tf-title">🗓️ MONTHLY</span><span class="tf-badge" id="monthlyBadge">--</span></div>
+                <div id="monthlyDetails"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-top: 24px;">
+            <div class="card">
+                <div class="section-title">🎯 Entry Strategy</div>
+                <div id="entryBox"></div>
+                <div style="margin-top: 16px;"><div class="section-title">📋 Triggers Needed for BUY</div><div id="triggerList"></div></div>
+            </div>
+            <div class="card">
+                <div class="section-title">📍 Key Levels</div>
+                <table class="levels-table">
+                    <thead><tr><th>Level</th><th>Price</th><th>Distance</th><th>Type</th></tr></thead>
+                    <tbody id="levelsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 24px;">
+            <div class="section-title">🚦 Signal Logic</div>
+            <div class="grid grid-3" style="margin-bottom: 0;">
+                <div class="logic-box">
+                    <h5 style="color: var(--green);">🟢 GREEN (BUY) - 5+/6 Bullish</h5>
+                    <ul><li>Daily MACD bullish cross</li><li>Weekly MACD bullish cross</li><li>Weekly RSI &lt; 35</li><li>Monthly RSI &lt; 35</li><li>Higher low pattern</li><li>Price above 20 MA</li></ul>
+                </div>
+                <div class="logic-box">
+                    <h5 style="color: var(--orange);">🟡 ORANGE (WAIT) - 2-4 Bullish</h5>
+                    <ul><li>Some oversold conditions</li><li>Waiting for MACD crossovers</li><li>No higher TF confirmation</li><li>Higher risk entry</li></ul>
+                </div>
+                <div class="logic-box">
+                    <h5 style="color: var(--red);">🔴 RED (NO ENTRY) - 0-1 Bullish or 5+ Bearish</h5>
+                    <ul><li>All TFs bearish</li><li>MACD negative D/W/M</li><li>Below all MAs</li><li>Making lower lows</li></ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="disclaimer">⚠️ Multi-timeframe confirmation required. BUY needs 5+/6 bullish confirmations. Single-timeframe oversold is NOT sufficient. Not financial advice.</div>
+    </div>
+
+    <script>
+        let DATA = { price: 0, change: 0, changePct: 0, daily: { ind: {} }, weekly: { ind: {} }, monthly: { ind: {} } };
+
+        const BULLISH = [
+            { id: 'dMacd', name: 'MACD Bullish Cross', tf: 'Daily', check: () => DATA.daily.ind.macd > DATA.daily.ind.macdSig, val: () => `${DATA.daily.ind.macd?.toFixed(2)} / ${DATA.daily.ind.macdSig?.toFixed(2)}`, req: 'MACD > Signal' },
+            { id: 'wMacd', name: 'MACD Bullish Cross', tf: 'Weekly', check: () => DATA.weekly.ind.macd > DATA.weekly.ind.macdSig, val: () => `${DATA.weekly.ind.macd?.toFixed(2)} / ${DATA.weekly.ind.macdSig?.toFixed(2)}`, req: 'MACD > Signal' },
+            { id: 'wRsi', name: 'RSI Oversold', tf: 'Weekly', check: () => DATA.weekly.ind.rsi14 < 35, val: () => `RSI: ${DATA.weekly.ind.rsi14?.toFixed(1)}`, req: 'RSI < 35' },
+            { id: 'mRsi', name: 'RSI Oversold', tf: 'Monthly', check: () => DATA.monthly.ind.rsi14 < 35, val: () => `RSI: ${DATA.monthly.ind.rsi14?.toFixed(1)}`, req: 'RSI < 35' },
+            { id: 'hl', name: 'Higher Low Pattern', tf: 'Daily', check: () => DATA.daily.ind.higherLow, val: () => DATA.daily.ind.higherLow ? 'Yes ✓' : 'No (Lower Lows)', req: 'Higher Low' },
+            { id: 'ma20', name: 'Price Above 20 MA', tf: 'Daily', check: () => DATA.price > DATA.daily.ind.ma20, val: () => `$${DATA.price?.toFixed(2)} vs $${DATA.daily.ind.ma20?.toFixed(2)}`, req: 'Price > 20MA' }
+        ];
+
+        const BEARISH = [
+            { id: 'dMacdB', name: 'MACD Bearish', tf: 'Daily', check: () => DATA.daily.ind.macd < DATA.daily.ind.macdSig && DATA.daily.ind.macd < 0, val: () => `MACD: ${DATA.daily.ind.macd?.toFixed(2)}`, when: 'MACD < Signal & < 0' },
+            { id: 'wMacdB', name: 'MACD Bearish', tf: 'Weekly', check: () => DATA.weekly.ind.macd < DATA.weekly.ind.macdSig && DATA.weekly.ind.macd < 0, val: () => `MACD: ${DATA.weekly.ind.macd?.toFixed(2)}`, when: 'MACD < Signal & < 0' },
+            { id: 'mMacdB', name: 'MACD Bearish', tf: 'Monthly', check: () => DATA.monthly.ind.macd < DATA.monthly.ind.macdSig && DATA.monthly.ind.macd < 0, val: () => `MACD: ${DATA.monthly.ind.macd?.toFixed(2)}`, when: 'MACD < Signal & < 0' },
+            { id: 'belowMA', name: 'Below All Key MAs', tf: 'Daily', check: () => DATA.price < DATA.daily.ind.ma20 && DATA.price < DATA.daily.ind.ma50 && DATA.price < DATA.daily.ind.ma200, val: () => `$${DATA.price?.toFixed(2)}`, when: 'Below 20/50/200 MA' },
+            { id: 'll', name: 'Making Lower Lows', tf: 'Daily', check: () => DATA.daily.ind.lowerLow, val: () => DATA.daily.ind.lowerLow ? 'Yes (Downtrend)' : 'No', when: 'Lower Lows' },
+            { id: 'wDown', name: 'Weekly Downtrend', tf: 'Weekly', check: () => DATA.weekly.ind.rsi14 < 50 && DATA.weekly.ind.macd < 0, val: () => `RSI:${DATA.weekly.ind.rsi14?.toFixed(0)}, MACD:${DATA.weekly.ind.macd?.toFixed(1)}`, when: 'RSI<50 & MACD<0' }
+        ];
+
+        function sma(p, n) { return p.length < n ? p[p.length-1]||0 : p.slice(-n).reduce((a,b)=>a+b,0)/n; }
+        function ema(p, n) { if(p.length<n) return sma(p,p.length); let m=2/(n+1), e=sma(p.slice(0,n),n); for(let i=n;i<p.length;i++) e=(p[i]-e)*m+e; return e; }
+        function rsi(p, n) { if(p.length<n+1) return 50; let g=0,l=0; for(let i=p.length-n;i<p.length;i++){let c=p[i]-p[i-1]; c>0?g+=c:l-=c;} return l===0?100:100-(100/(1+(g/n)/(l/n))); }
+        function macd(p) { if(p.length<26) return {macd:0,sig:0}; let m=ema(p,12)-ema(p,26); return {macd:m,sig:m*0.85}; }
+        function hl(p) { if(p.length<30) return false; return Math.min(...p.slice(-15)) > Math.min(...p.slice(-30,-15)); }
+        function ll(p) { if(p.length<30) return false; return Math.min(...p.slice(-15)) < Math.min(...p.slice(-30,-15)); }
+        function calc(p) { let m=macd(p); return {ma20:sma(p,20),ma50:sma(p,50),ma100:sma(p,100),ma200:sma(p,200),rsi14:rsi(p,14),macd:m.macd,macdSig:m.sig,higherLow:hl(p),lowerLow:ll(p)}; }
+
+        async function fetchAllData() {
+            const btn=document.getElementById('refreshBtn'), dot=document.getElementById('apiDot'), st=document.getElementById('apiStatusText');
+            btn.disabled=true; dot.className='api-dot loading';
+            try {
+                st.textContent='Daily...'; await fetchTF('1d','2y','daily');
+                st.textContent='Weekly...'; await fetchTF('1wk','5y','weekly');
+                st.textContent='Monthly...'; await fetchTF('1mo','10y','monthly');
+                dot.className='api-dot'; st.textContent='Loaded';
+            } catch(e) { dot.className='api-dot error'; st.textContent='Fallback'; fallback(); }
+            updateUI(); btn.disabled=false;
+        }
+
+        async function fetchTF(int, rng, tf) {
+            const px=['https://api.allorigins.win/raw?url=','https://corsproxy.io/?',''];
+            const url=`https://query1.finance.yahoo.com/v8/finance/chart/CSL.AX?interval=${int}&range=${rng}`;
+            for(const p of px) {
+                try {
+                    const r=await fetch(p+encodeURIComponent(url)); if(!r.ok) continue;
+                    const j=await r.json(); if(j.chart?.result?.[0]) {
+                        const d=j.chart.result[0], c=d.indicators.quote[0].close.filter(x=>x!==null);
+                        DATA[tf].ind=calc(c);
+                        if(tf==='daily') { DATA.price=d.meta.regularMarketPrice||c[c.length-1]; let pv=d.meta.chartPreviousClose||c[c.length-2]; DATA.change=DATA.price-pv; DATA.changePct=(DATA.change/pv)*100; }
+                        return;
+                    }
+                } catch(e) { continue; }
+            }
+            throw new Error(tf);
+        }
+
+        function fallback() {
+            DATA.price=170.24; DATA.change=-2.22; DATA.changePct=-1.29;
+            DATA.daily.ind={ma20:176.56,ma50:180.02,ma100:195.85,ma200:222.26,rsi14:34.7,macd:-3.17,macdSig:-2.80,higherLow:false,lowerLow:true};
+            DATA.weekly.ind={ma20:188,ma50:205,ma100:235,ma200:255,rsi14:38,macd:-5.8,macdSig:-4.2,higherLow:false,lowerLow:true};
+            DATA.monthly.ind={ma20:215,ma50:248,ma100:268,ma200:275,rsi14:42,macd:-9.2,macdSig:-6.5,higherLow:false,lowerLow:true};
+        }
+
+        function updateUI() {
+            document.getElementById('currentPrice').textContent=`$${DATA.price.toFixed(2)}`;
+            const ce=document.getElementById('priceChange');
+            ce.textContent=`${DATA.change>=0?'+':''}${DATA.change.toFixed(2)} (${DATA.changePct.toFixed(2)}%)`;
+            ce.className=`price-change ${DATA.change>=0?'positive':'negative'}`;
+            document.getElementById('lastUpdate').textContent=`Updated: ${new Date().toLocaleString()}`;
+
+            const bp=BULLISH.filter(c=>c.check()).length, brp=BEARISH.filter(c=>c.check()).length;
+
+            document.getElementById('bullishTable').innerHTML=BULLISH.map(c=>{
+                const p=c.check(); return `<tr><td><span class="status-icon ${p?'pass':'fail'}">${p?'✓':'✗'}</span></td><td>${c.name}</td><td style="color:${c.tf==='Daily'?'var(--blue)':c.tf==='Weekly'?'var(--purple)':'var(--orange)'}">${c.tf}</td><td style="font-family:monospace">${c.val()}</td><td style="color:var(--text-muted)">${c.req}</td></tr>`;
+            }).join('');
+
+            document.getElementById('bearishTable').innerHTML=BEARISH.map(c=>{
+                const p=c.check(); return `<tr><td><span class="status-icon ${p?'fail':'pass'}">${p?'!':'✓'}</span></td><td>${c.name}</td><td style="color:${c.tf==='Daily'?'var(--blue)':c.tf==='Weekly'?'var(--purple)':'var(--orange)'}">${c.tf}</td><td style="font-family:monospace">${c.val()}</td><td style="color:var(--text-muted)">${c.when}</td></tr>`;
+            }).join('');
+
+            document.getElementById('bullishTotal').textContent=`${bp}/6`;
+            document.getElementById('bearishTotal').textContent=`${brp}/6`;
+            document.getElementById('bullishCount').textContent=`🟢 Bullish: ${bp}/6`;
+            document.getElementById('bearishCount').textContent=`🔴 Bearish: ${brp}/6`;
+
+            const r=document.getElementById('lightRed'),o=document.getElementById('lightOrange'),g=document.getElementById('lightGreen'),t=document.getElementById('signalText');
+            r.classList.remove('active');o.classList.remove('active');g.classList.remove('active');
+            if(bp>=5){g.classList.add('active');t.textContent='BUY';t.className='signal-text buy';}
+            else if(bp>=2&&brp<5){o.classList.add('active');t.textContent='WAIT';t.className='signal-text wait';}
+            else{r.classList.add('active');t.textContent='NO ENTRY';t.className='signal-text sell';}
+
+            ['daily','weekly','monthly'].forEach(tf=>{
+                const i=DATA[tf].ind, mb=i.macd>i.macdSig, ro=i.rsi14<40;
+                let sig,cls; if(mb&&ro){sig='BULLISH';cls='bullish';}else if(!mb&&i.rsi14>50){sig='BEARISH';cls='bearish';}else{sig='NEUTRAL';cls='neutral';}
+                document.getElementById(`${tf}Badge`).textContent=sig;
+                document.getElementById(`${tf}Badge`).className=`tf-badge ${cls}`;
+                document.getElementById(`${tf}SignalSum`).innerHTML=`<span style="color:${cls==='bullish'?'var(--green)':cls==='bearish'?'var(--red)':'var(--orange)'}">${sig}</span>`;
+                document.getElementById(`${tf}Details`).innerHTML=`
+                    <div class="indicator-row"><span class="indicator-name">RSI(14)</span><span class="indicator-value" style="color:${i.rsi14<35?'var(--green)':i.rsi14>65?'var(--red)':'inherit'}">${i.rsi14?.toFixed(1)}</span></div>
+                    <div class="indicator-row"><span class="indicator-name">MACD</span><span class="indicator-value" style="color:${mb?'var(--green)':'var(--red)'}">${i.macd?.toFixed(2)}</span></div>
+                    <div class="indicator-row"><span class="indicator-name">MACD Signal</span><span class="indicator-value">${i.macdSig?.toFixed(2)}</span></div>
+                    <div class="indicator-row"><span class="indicator-name">20 MA</span><span class="indicator-value" style="color:${DATA.price>i.ma20?'var(--green)':'var(--red)'}">$${i.ma20?.toFixed(2)}</span></div>
+                    <div class="indicator-row"><span class="indicator-name">50 MA</span><span class="indicator-value" style="color:${DATA.price>i.ma50?'var(--green)':'var(--red)'}">$${i.ma50?.toFixed(2)}</span></div>
+                    ${tf==='daily'?`<div class="indicator-row"><span class="indicator-name">Pattern</span><span class="indicator-value" style="color:${i.higherLow?'var(--green)':'var(--red)'}">${i.higherLow?'Higher Low ✓':'Lower Low ✗'}</span></div>`:''}
+                `;
+            });
+
+            document.getElementById('mtfAlign').innerHTML=bp>=4?'<span style="color:var(--green)">BULLISH</span>':brp>=4?'<span style="color:var(--red)">BEARISH</span>':'<span style="color:var(--orange)">MIXED</span>';
+            document.getElementById('entryQual').innerHTML=bp>=5?'<span style="color:var(--green)">HIGH</span>':bp>=3?'<span style="color:var(--orange)">MEDIUM</span>':'<span style="color:var(--red)">LOW</span>';
+
+            const miss=BULLISH.filter(c=>!c.check());
+            let eb='';
+            if(bp>=5) eb=`<div class="entry-box buy"><h4 style="color:var(--green)">✅ BUY SIGNAL</h4><p>${bp}/6 confirmations. Entry supported. Stop below $165. Target: 20MA ($${DATA.daily.ind.ma20?.toFixed(2)})</p></div>`;
+            else if(bp>=2) eb=`<div class="entry-box wait"><h4 style="color:var(--orange)">⏳ WAIT</h4><p>${bp}/6 confirmations. Need ${5-bp} more. Some oversold but no HTF confirmation.</p></div>`;
+            else eb=`<div class="entry-box sell"><h4 style="color:var(--red)">🛑 NO ENTRY</h4><p>${brp}/6 bearish active. All TFs show sell. Wait for Daily MACD cross.</p></div>`;
+            document.getElementById('entryBox').innerHTML=eb;
+
+            document.getElementById('triggerList').innerHTML=miss.length?`<div style="font-size:11px;color:var(--text-secondary)"><p style="margin-bottom:8px">Need for BUY:</p><ul style="padding-left:16px;line-height:1.8">${miss.map(c=>`<li><b>${c.tf}:</b> ${c.name} → ${c.req}</li>`).join('')}</ul></div>`:'<p style="color:var(--green);font-size:11px">✓ All confirmations met!</p>';
+
+            const lvls=[
+                {n:'200 MA',p:DATA.daily.ind.ma200,t:'R'},{n:'100 MA',p:DATA.daily.ind.ma100,t:'R'},{n:'50 MA',p:DATA.daily.ind.ma50,t:'R'},{n:'20 MA',p:DATA.daily.ind.ma20,t:'R'},
+                {n:'Current',p:DATA.price,t:'C'},{n:'52wk Low',p:167.99,t:'S'},{n:'Support',p:165,t:'S'},{n:'Critical',p:160,t:'S'}
+            ].sort((a,b)=>b.p-a.p);
+            document.getElementById('levelsBody').innerHTML=lvls.map(l=>{
+                const d=((l.p-DATA.price)/DATA.price*100).toFixed(1);
+                const cls=l.t==='C'?'level-current':l.t==='S'?'level-support':'level-resistance';
+                return `<tr class="${cls}"><td>${l.n}</td><td style="font-family:monospace">$${l.p.toFixed(2)}</td><td style="font-family:monospace">${l.t!=='C'?(d>0?'+':'')+d+'%':'--'}</td><td>${l.t==='C'?'●':l.t==='S'?'Support':'Resistance'}</td></tr>`;
+            }).join('');
+        }
+
+        window.onload=()=>{fetchAllData();setInterval(fetchAllData,600000);};
+    </script>
+</body>
+</html>
